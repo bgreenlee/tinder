@@ -46,7 +46,7 @@ module Tinder
     def topic=(topic)
       update :topic => topic
     end
-    
+
     def update(attrs)
       connection.put("/room/#{@id}.json", :body => {:room => attrs}.to_json)
     end
@@ -94,11 +94,11 @@ module Tinder
           user_data = connection.get("/users/#{id}.json")
           user = user_data && user_data[:user]
         end
-        user[:created_at] = Time.parse(user[:created_at])        
+        user[:created_at] = Time.parse(user[:created_at])
         user
       end
     end
-    
+
     # Listen for new messages in the room, yielding them to the provided block as they arrive.
     # Each message is a hash with:
     # * +:body+: the body of the message
@@ -117,13 +117,18 @@ module Tinder
     #   room.listen do |m|
     #     room.speak "Go away!" if m[:body] =~ /Java/i
     #   end
+    #
+    # You can optionally pass in an exception handler to handle any exceptions that
+    # occur within the stream listener, which are normally swallowed.
+    #   :on_error => proc
+    # If no exception handler is provided, exceptions will be output to stdout
     def listen(options = {})
       raise "no block provided" unless block_given?
 
       join # you have to be in the room to listen
 
       require 'twitter/json_stream'
-      
+
       auth = connection.default_options[:basic_auth]
       options = {
         :host => "streaming.#{Connection::HOST}",
@@ -135,12 +140,20 @@ module Tinder
       EventMachine::run do
         stream = Twitter::JSONStream.connect(options)
         stream.each_item do |message|
-          message = HashWithIndifferentAccess.new(JSON.parse(message))
-          message[:user] = user(message.delete(:user_id))
-          message[:created_at] = Time.parse(message[:created_at])
-          yield(message)
+          begin
+            message = HashWithIndifferentAccess.new(JSON.parse(message))
+            message[:user] = user(message.delete(:user_id))
+            message[:created_at] = Time.parse(message[:created_at])
+            yield(message)
+          rescue Exception => e
+            if options[:on_error]
+              options[:on_error].call(e)
+            else
+              puts "Exception: #{e.message}", *e.backtrace
+            end
+          end
         end
-        # if we really get disconnected 
+        # if we really get disconnected
         raise ListenFailed.new("got disconnected from #{@name}!") if !EventMachine.reactor_running?
       end
     end
