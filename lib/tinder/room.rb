@@ -128,6 +128,7 @@ module Tinder
       join # you have to be in the room to listen
 
       require 'twitter/json_stream'
+      require 'json'
 
       auth = connection.default_options[:basic_auth]
       options = {
