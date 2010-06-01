@@ -18,6 +18,7 @@ module Tinder
     # Leave a room
     def leave
       post 'leave'
+      stop_listening
     end
 
     # Get the url for guest access
@@ -123,7 +124,7 @@ module Tinder
     #   :on_error => proc
     # If no exception handler is provided, exceptions will be output to stdout
     def listen(options = {})
-      raise "no block provided" unless block_given?
+      raise ArgumentError, "no block provided" unless block_given?
 
       join # you have to be in the room to listen
 
@@ -139,8 +140,8 @@ module Tinder
         :ssl => connection.options[:ssl]
       }.merge(options)
       EventMachine::run do
-        stream = Twitter::JSONStream.connect(options)
-        stream.each_item do |message|
+        @stream = Twitter::JSONStream.connect(options)
+        @stream.each_item do |message|
           begin
             message = HashWithIndifferentAccess.new(JSON.parse(message))
             message[:user] = user(message.delete(:user_id))
@@ -157,6 +158,17 @@ module Tinder
         # if we really get disconnected
         raise ListenFailed.new("got disconnected from #{@name}!") if !EventMachine.reactor_running?
       end
+    end
+
+    def listening?
+      @stream != nil
+    end
+
+    def stop_listening
+      return unless listening?
+
+      @stream.stop
+      @stream = nil
     end
 
     # Get the transcript for the given date (Returns a hash in the same format as #listen)
